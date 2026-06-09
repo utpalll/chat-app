@@ -230,298 +230,166 @@ std::string chat_page() {
   <style>
     :root {
       color-scheme: dark;
-      --bg:          #08090c;
-      --surface:     #0e1117;
-      --surface-2:   #151a23;
-      --line:        rgba(255,255,255,.07);
-      --text:        #eef0f4;
-      --muted:       #7a8494;
-      --blue:        #4f8ef7;
-      --blue-dim:    rgba(79,142,247,.15);
-      --green:       #34d399;
-      --green-dim:   rgba(52,211,153,.14);
-      --coral:       #f87171;
-      --coral-dim:   rgba(248,113,113,.14);
-      --bubble:      #1a2030;
-      --own:         #1a3a8f;
-      --own-bright:  #2351c5;
-      --radius-sm:   10px;
-      --radius-md:   14px;
-      --radius-lg:   18px;
+      --bg: #090a0f;
+      --glass-bg: rgba(20, 25, 35, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --text: #fdfdfd;
+      --muted: #9ca3af;
+      --accent1: #ff007a;
+      --accent2: #7928ca;
+      --accent3: #00d4ff;
+      --bubble-other: rgba(255, 255, 255, 0.05);
+      --bubble-own: linear-gradient(135deg, var(--accent2) 0%, var(--accent1) 100%);
+      --system-bg: rgba(255, 255, 255, 0.03);
     }
-    *, *::before, *::after { box-sizing: border-box; }
-
+    * { box-sizing: border-box; }
     html, body {
       margin: 0;
       min-height: 100vh;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
-      font-size: 15px;
-      -webkit-font-smoothing: antialiased;
-      color: var(--text);
       background-color: var(--bg);
-      background-image:
-        radial-gradient(ellipse 70% 55% at 10% 5%,  rgba(79,142,247,.09) 0%, transparent 60%),
-        radial-gradient(ellipse 50% 45% at 90% 90%,  rgba(79,142,247,.06) 0%, transparent 55%);
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(121, 40, 202, 0.15), transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(0, 212, 255, 0.15), transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(255, 0, 122, 0.05), transparent 50%);
+      background-attachment: fixed;
+      color: var(--text);
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
     }
-    body {
-      display: grid;
-      place-items: center;
-      padding: 20px;
-    }
-
-    /* ── App shell ───────────────────────────────────────────────── */
+    body { display: grid; place-items: center; padding: 20px; }
+    
     main {
-      width: min(900px, 100%);
+      width: min(920px, 100%);
       height: min(780px, calc(100vh - 40px));
-      min-height: 520px;
+      min-height: 560px;
       display: grid;
       grid-template-rows: auto 1fr auto;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-lg);
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
       overflow: hidden;
-      box-shadow:
-        0 0 0 1px rgba(255,255,255,.04) inset,
-        0 32px 80px rgba(0,0,0,.55),
-        0 8px 24px rgba(0,0,0,.3);
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);
     }
-
-    /* ── Header ──────────────────────────────────────────────────── */
+    
     header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 16px 20px;
-      background: var(--surface-2);
-      border-bottom: 1px solid var(--line);
-      backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 20px 24px;
+      background: rgba(0, 0, 0, 0.2);
+      border-bottom: 1px solid var(--glass-border);
     }
     h1 {
-      margin: 0;
-      font-size: clamp(17px, 2.5vw, 22px);
-      font-weight: 650;
-      letter-spacing: -0.02em;
-      line-height: 1.1;
-      background: linear-gradient(135deg, #fff 30%, #94a3b8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      margin: 0; font-size: clamp(20px, 3vw, 26px); font-weight: 700;
+      background: linear-gradient(to right, var(--accent3), #fff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      min-width: 0;
-    }
+    .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
     .mark {
-      width: 38px;
-      height: 38px;
-      border-radius: 9px;
-      background: linear-gradient(135deg, #2351c5, #4f8ef7);
-      color: #fff;
-      display: grid;
-      place-items: center;
-      font-weight: 800;
-      font-size: 13px;
-      letter-spacing: 0.03em;
-      flex: 0 0 auto;
-      box-shadow: 0 2px 10px rgba(79,142,247,.35);
+      width: 48px; height: 48px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent2), var(--accent1));
+      color: white; display: grid; place-items: center;
+      font-weight: 800; font-size: 18px; flex: 0 0 auto;
+      box-shadow: 0 4px 12px rgba(121, 40, 202, 0.3);
     }
     #status {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      color: var(--muted);
-      font-size: 13px;
-      white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 8px;
+      color: var(--muted); font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
     }
     #status::before {
-      content: "";
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: var(--coral);
-      box-shadow: 0 0 0 3px var(--coral-dim);
-      transition: background .3s, box-shadow .3s;
+      content: ""; width: 8px; height: 8px; border-radius: 50%;
+      background: #ff4757; box-shadow: 0 0 10px #ff4757;
+      transition: all 0.3s ease;
     }
     #status.connected::before {
-      background: var(--green);
-      box-shadow: 0 0 0 3px var(--green-dim);
+      background: #2ed573; box-shadow: 0 0 10px #2ed573;
     }
-
-    /* ── Join panel ──────────────────────────────────────────────── */
-    #joinPanel {
-      display: grid;
-      place-items: center;
-      padding: 28px;
-      background:
-        radial-gradient(ellipse 60% 50% at 50% 40%, rgba(79,142,247,.07) 0%, transparent 70%);
-    }
+    
+    #joinPanel { display: grid; place-items: center; padding: 24px; }
     .join-box {
-      width: min(400px, 100%);
-      display: grid;
-      gap: 18px;
-      padding: 28px 24px;
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: var(--radius-md);
-      background: rgba(14,17,23,.85);
-      box-shadow: 0 8px 40px rgba(0,0,0,.4);
-      backdrop-filter: blur(12px);
+      width: min(400px, 100%); display: grid; gap: 20px; padding: 30px;
+      border: 1px solid var(--glass-border); border-radius: 16px;
+      background: rgba(0, 0, 0, 0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.2);
     }
-    .join-box h2 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 650;
-      letter-spacing: -0.02em;
-      color: var(--text);
-    }
-    .join-box p {
-      margin: -8px 0 0;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .join-row {
-      display: flex;
-      gap: 10px;
-    }
-
-    /* ── Messages ────────────────────────────────────────────────── */
+    .join-box h2 { margin: 0; font-size: 24px; text-align: center; font-weight: 600; }
+    .join-row { display: flex; gap: 12px; flex-direction: column; }
+    
     #messages {
-      min-height: 0;
-      padding: 20px 18px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      scroll-behavior: smooth;
+      min-height: 0; padding: 24px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth;
     }
-    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar { width: 6px; }
     #messages::-webkit-scrollbar-track { background: transparent; }
-    #messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 4px; }
-
-    @keyframes msg-in {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: translateY(0); }
+    #messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    
+    @keyframes slideUpFade {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
     }
+    
     .message {
-      width: fit-content;
-      max-width: min(75%, 580px);
-      display: grid;
-      gap: 4px;
-      align-self: flex-start;
-      animation: msg-in .2s ease both;
+      width: fit-content; max-width: min(85%, 600px);
+      display: grid; gap: 6px; align-self: flex-start;
+      animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
     .message.own { align-self: flex-end; }
-    .meta {
-      color: var(--muted);
-      font-size: 11px;
-      padding: 0 4px;
-      letter-spacing: 0.01em;
-    }
+    
+    .meta { color: var(--muted); font-size: 11px; padding: 0 6px; font-weight: 500; letter-spacing: 0.3px; }
     .message.own .meta { text-align: right; }
+    
     .bubble {
-      padding: 10px 14px;
-      border-radius: var(--radius-sm);
-      background: var(--bubble);
-      border: 1px solid rgba(255,255,255,.055);
-      color: var(--text);
-      line-height: 1.5;
-      overflow-wrap: anywhere;
+      padding: 14px 18px; border-radius: 18px; border-bottom-left-radius: 4px;
+      background: var(--bubble-other); backdrop-filter: blur(10px);
+      color: var(--text); line-height: 1.5; overflow-wrap: anywhere;
+      border: 1px solid var(--glass-border); font-size: 15px;
     }
     .own .bubble {
-      background: var(--own);
-      border-color: rgba(79,142,247,.2);
-      color: #ddeeff;
+      background: var(--bubble-own); border: none;
+      border-bottom-left-radius: 18px; border-bottom-right-radius: 4px;
+      box-shadow: 0 6px 20px rgba(121, 40, 202, 0.25);
     }
+    
     .system {
-      align-self: center;
-      max-width: 88%;
-      color: var(--muted);
-      font-size: 12px;
-      text-align: center;
-      padding: 5px 12px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: rgba(255,255,255,.03);
-      animation: msg-in .2s ease both;
+      align-self: center; max-width: 90%; color: var(--muted); font-size: 12px;
+      text-align: center; padding: 8px 16px; border-radius: 999px;
+      background: var(--system-bg); border: 1px solid var(--glass-border);
+      animation: slideUpFade 0.4s ease forwards;
     }
-
-    /* ── Composer ────────────────────────────────────────────────── */
+    
     #composer {
-      display: flex;
-      gap: 10px;
-      padding: 14px 16px;
-      background: var(--surface-2);
-      border-top: 1px solid var(--line);
+      display: flex; gap: 12px; padding: 20px 24px;
+      background: rgba(0, 0, 0, 0.2); border-top: 1px solid var(--glass-border);
     }
     input {
-      flex: 1;
-      min-width: 0;
-      border: 1px solid rgba(255,255,255,.1);
-      border-radius: var(--radius-sm);
-      background: rgba(8,9,12,.8);
-      color: var(--text);
-      padding: 11px 14px;
-      font-size: 15px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color .2s, box-shadow .2s;
+      flex: 1; min-width: 0; border: 1px solid var(--glass-border); border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03); color: #fff; padding: 14px 18px;
+      font-size: 15px; outline: none; transition: all 0.2s ease;
     }
-    input::placeholder { color: var(--muted); }
     input:focus {
-      border-color: rgba(79,142,247,.5);
-      box-shadow: 0 0 0 3px var(--blue-dim);
+      background: rgba(255, 255, 255, 0.06); border-color: var(--accent3); 
+      box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.1);
     }
     button {
-      border: 0;
-      border-radius: var(--radius-sm);
-      background: linear-gradient(135deg, #2351c5, #4f8ef7);
-      color: #fff;
-      min-height: 44px;
-      padding: 0 20px;
-      font-weight: 700;
-      font-size: 15px;
-      font-family: inherit;
-      cursor: pointer;
-      box-shadow: 0 2px 10px rgba(79,142,247,.3);
-      transition: opacity .15s ease, transform .15s ease, box-shadow .15s ease;
+      border: 0; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent3), #0072ff);
+      color: #fff; min-height: 48px; padding: 0 24px;
+      font-weight: 600; font-size: 15px; cursor: pointer;
+      transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(0, 212, 255, 0.2);
     }
     button:hover:not(:disabled) {
-      opacity: .9;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 16px rgba(79,142,247,.4);
+      transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 212, 255, 0.3);
     }
-    button:active:not(:disabled) {
-      transform: translateY(0);
-    }
-    button:disabled {
-      opacity: .35;
-      cursor: not-allowed;
-      box-shadow: none;
-    }
-
-    /* ── Visibility toggles (unchanged logic) ────────────────────── */
-    main:not(.joined) #messages,
-    main:not(.joined) #composer { display: none; }
-    main.joined #joinPanel      { display: none; }
-
-    /* ── Mobile ──────────────────────────────────────────────────── */
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    
+    main:not(.joined) #messages, main:not(.joined) #composer { display: none; }
+    main.joined #joinPanel { display: none; }
+    
     @media (max-width: 640px) {
       body { padding: 0; }
-      main {
-        width: 100%; height: 100vh; min-height: 100vh;
-        border: 0; border-radius: 0;
-      }
-      header { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
+      main { width: 100%; height: 100vh; border: 0; border-radius: 0; }
+      header { padding: 16px; }
       .message { max-width: 90%; }
-      #messages { padding: 14px 12px; }
-      #composer, .join-row { flex-direction: column; }
-      button { width: 100%; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .message, .system { animation: none; }
-      button, input { transition: none; }
+      #messages, #composer { padding: 16px; }
+      .join-box { border: none; background: transparent; box-shadow: none; padding: 20px; }
     }
   </style>
 </head>
@@ -537,7 +405,6 @@ std::string chat_page() {
     <section id="joinPanel">
       <form id="joinForm" class="join-box">
         <h2>Join the room</h2>
-        <p>Pick a name and start chatting.</p>
         <div class="join-row">
           <input id="name" autocomplete="name" placeholder="Your name" maxlength="32">
           <button type="submit">Join</button>
