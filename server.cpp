@@ -1,32 +1,6 @@
 // =============================================================================
-//  Chat Server
+//  Chat Server - Discord Facelift Edition
 // =============================================================================
-//
-//  A multi-client TCP chat server written in C++ using POSIX sockets.
-//
-//  Architecture
-//  ------------
-//   * One acceptor loop (main thread) waits for incoming connections.
-//   * Each accepted client is handled on its own detached worker thread.
-//   * A shared, mutex-protected registry of connected clients lets the
-//     server broadcast every message to all *other* connected clients.
-//
-//  Protocol
-//  --------
-//   Newline-terminated UTF-8 text. The first line a client sends is treated
-//   as its display name; every subsequent line is broadcast as a chat
-//   message prefixed with that name.
-//
-//  Build
-//  -----
-//   g++ -std=c++17 -pthread server.cpp -o server
-//
-//  Run
-//  ---
-//   ./server [port]
-//
-// =============================================================================
-
 #include "common.h"
 
 #include <atomic>
@@ -48,10 +22,6 @@
 
 namespace {
 
-// -----------------------------------------------------------------------------
-//  Connected-client registry
-// -----------------------------------------------------------------------------
-//
 enum class ClientKind {
     RawTcp,
     ServerSentEvents,
@@ -62,17 +32,10 @@ struct ClientInfo {
     ClientKind  kind;
 };
 
-// Maps a client socket file descriptor to that client's display name/type.
-// Guarded by `g_clients_mutex` because worker threads read and write it
-// concurrently.
 std::map<int, ClientInfo> g_clients;
 std::mutex                g_clients_mutex;
+std::atomic<bool>         g_running{true};
 
-// Flips to false when the server is shutting down (e.g. on SIGINT).
-std::atomic<bool> g_running{true};
-
-// Writes the entire contents of `data` to `fd`, retrying on partial writes.
-// Returns true on success, false if the socket failed.
 bool send_all(int fd, const std::string& data) {
     size_t total_sent = 0;
     while (total_sent < data.size()) {
@@ -86,8 +49,6 @@ bool send_all(int fd, const std::string& data) {
     return true;
 }
 
-// Sends `message` to every connected client except `exclude_fd`.
-// Pass exclude_fd = -1 to broadcast to absolutely everyone.
 std::string sse_payload(const std::string& message) {
     std::string payload = message;
     while (!payload.empty() && (payload.back() == '\n' || payload.back() == '\r')) {
@@ -129,13 +90,11 @@ void broadcast(const std::string& message, int exclude_fd) {
     }
 }
 
-// Adds a client to the registry.
 void register_client(int fd, const std::string& name, ClientKind kind) {
     std::lock_guard<std::mutex> lock(g_clients_mutex);
     g_clients[fd] = ClientInfo{name, kind};
 }
 
-// Removes a client from the registry and returns its last known name.
 std::string unregister_client(int fd) {
     std::lock_guard<std::mutex> lock(g_clients_mutex);
     auto it = g_clients.find(fd);
@@ -147,7 +106,6 @@ std::string unregister_client(int fd) {
     return name;
 }
 
-// Returns the current number of connected clients.
 size_t client_count() {
     std::lock_guard<std::mutex> lock(g_clients_mutex);
     return g_clients.size();
@@ -175,7 +133,6 @@ std::string url_decode(const std::string& value) {
             decoded.push_back(value[i]);
         }
     }
-
     return decoded;
 }
 
@@ -220,6 +177,9 @@ int content_length(const std::string& headers) {
     return 0;
 }
 
+// =============================================================================
+//  DISCORD THEMED HTML/CSS UI 
+// =============================================================================
 std::string chat_page() {
     return R"(<!doctype html>
 <html lang="en">
@@ -227,195 +187,559 @@ std::string chat_page() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Family Chat</title>
+  
   <style>
     :root {
-      color-scheme: dark;
-      --bg: #090a0f;
-      --glass-bg: rgba(20, 25, 35, 0.65);
-      --glass-border: rgba(255, 255, 255, 0.08);
-      --text: #fdfdfd;
-      --muted: #9ca3af;
-      --accent1: #ff007a;
-      --accent2: #7928ca;
-      --accent3: #00d4ff;
-      --bubble-other: rgba(255, 255, 255, 0.05);
-      --bubble-own: linear-gradient(135deg, var(--accent2) 0%, var(--accent1) 100%);
-      --system-bg: rgba(255, 255, 255, 0.03);
+      --bg-0: #0b0f19;
+      --bg-1: #111827;
+      --bg-2: #171b2a;
+      --bg-3: #1f2436;
+      --panel: rgba(17, 24, 39, 0.78);
+      --panel-strong: rgba(11, 15, 25, 0.92);
+      --line: rgba(255, 255, 255, 0.08);
+      --line-strong: rgba(255, 255, 255, 0.14);
+      --text: #eef2ff;
+      --muted: #9aa3b2;
+      --muted-2: #7b8496;
+      --brand: #7c5cff;
+      --brand-2: #8b5cf6;
+      --brand-3: #22d3ee;
+      --brand-4: #ff5ea8;
+      --success: #2dd4bf;
+      --danger: #fb7185;
+      --shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+      --shadow-soft: 0 10px 35px rgba(0, 0, 0, 0.28);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+      --sidebar-w: 270px;
+      --header-h: 66px;
+      --composer-h: 92px;
+      --channel-h: 50px;
     }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; }
+
+    body {
       min-height: 100vh;
-      background-color: var(--bg);
-      background-image: 
-        radial-gradient(circle at 10% 20%, rgba(121, 40, 202, 0.15), transparent 40%),
-        radial-gradient(circle at 90% 80%, rgba(0, 212, 255, 0.15), transparent 40%),
-        radial-gradient(circle at 50% 50%, rgba(255, 0, 122, 0.05), transparent 50%);
-      background-attachment: fixed;
-      color: var(--text);
-      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-    }
-    body { display: grid; place-items: center; padding: 20px; }
-    
-    main {
-      width: min(920px, 100%);
-      height: min(780px, calc(100vh - 40px));
-      min-height: 560px;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      background: var(--glass-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid var(--glass-border);
-      border-radius: 20px;
       overflow: hidden;
-      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(124, 92, 255, 0.22), transparent 28%),
+        radial-gradient(circle at 90% 18%, rgba(34, 211, 238, 0.18), transparent 24%),
+        radial-gradient(circle at 75% 92%, rgba(255, 94, 168, 0.18), transparent 26%),
+        linear-gradient(135deg, #060816 0%, #0b1020 42%, #080b14 100%);
+      position: relative;
     }
-    
+
+    body::before, body::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      pointer-events: none;
+      filter: blur(50px);
+      opacity: 0.7;
+      z-index: 0;
+    }
+    body::before {
+      width: 32rem; height: 32rem; left: -8rem; top: -6rem;
+      background: radial-gradient(circle, rgba(124, 92, 255, 0.32), transparent 68%);
+    }
+    body::after {
+      width: 26rem; height: 26rem; right: -7rem; bottom: -6rem;
+      background: radial-gradient(circle, rgba(34, 211, 238, 0.28), transparent 70%);
+    }
+
+    #app {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      background: linear-gradient(180deg, rgba(11, 15, 25, 0.82), rgba(11, 15, 25, 0.72));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(20px);
+      border-radius: 0;
+    }
+
+    #app::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(120deg, rgba(124, 92, 255, 0.08), transparent 30%),
+        linear-gradient(300deg, rgba(34, 211, 238, 0.06), transparent 35%);
+      z-index: 0;
+    }
+
+    #app > * { position: relative; z-index: 1; }
+
+    #app:not(.joined) .sidebar { display: none; }
+    #app:not(.joined) .main-chat-area {
+      width: 100vw; height: 100vh;
+      display: flex; justify-content: center; align-items: center;
+      background:
+        radial-gradient(circle at 50% 35%, rgba(124, 92, 255, 0.08), transparent 34%),
+        radial-gradient(circle at 50% 100%, rgba(255, 94, 168, 0.08), transparent 28%),
+        linear-gradient(180deg, rgba(9, 12, 22, 0.96), rgba(6, 8, 16, 0.92));
+    }
+   #app:not(.joined) .main-chat-area {
+      width: 100vw; height: 100vh;
+      display: flex; justify-content: center; align-items: center;
+      background:
+        radial-gradient(circle at 50% 35%, rgba(124, 92, 255, 0.08), transparent 34%),
+        radial-gradient(circle at 50% 100%, rgba(255, 94, 168, 0.08), transparent 28%),
+        linear-gradient(180deg, rgba(9, 12, 22, 0.96), rgba(6, 8, 16, 0.92));
+    }
+    #app:not(.joined) header, #app:not(.joined) #messages, #app:not(.joined) #composer { display: none; }
+
+    #app.joined #joinPanel { 
+      display: none; 
+    }}
+
+    #app.joined .sidebar {
+      width: var(--sidebar-w);
+      background: linear-gradient(180deg, rgba(19, 24, 38, 0.92), rgba(14, 18, 29, 0.96));
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--line);
+      box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .sidebar-header {
+      height: 78px; padding: 0 18px;
+      display: flex; align-items: center; gap: 12px;
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(135deg, rgba(124, 92, 255, 0.16), rgba(34, 211, 238, 0.08)),
+        rgba(255, 255, 255, 0.02);
+      position: relative;
+    }
+    .sidebar-header::before {
+      content: ""; width: 12px; height: 12px; border-radius: 999px;
+      background: linear-gradient(135deg, var(--brand-3), var(--brand));
+      box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.1);
+      flex: 0 0 auto;
+    }
+    .sidebar-header::after {
+      content: "";
+      position: absolute; left: 18px; right: 18px; bottom: -1px; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(124, 92, 255, 0.75), rgba(34, 211, 238, 0.7), transparent);
+      opacity: 0.8;
+    }
+    .sidebar-header h3 {
+      font-size: 15px; font-weight: 800; letter-spacing: 0.2px; color: #fff; line-height: 1;
+    }
+
+    .sidebar-channels { padding: 14px 10px; flex: 1; overflow-y: auto; }
+    .sidebar-channels::-webkit-scrollbar, #messages::-webkit-scrollbar { width: 10px; }
+    .sidebar-channels::-webkit-scrollbar-track, #messages::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-channels::-webkit-scrollbar-thumb, #messages::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(124, 92, 255, 0.35), rgba(34, 211, 238, 0.28));
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+
+    .channel-item {
+      height: var(--channel-h);
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 14px;
+      border-radius: 16px;
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      margin-bottom: 8px;
+      transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+      background: transparent;
+    }
+    .channel-item:hover {
+      transform: translateX(4px);
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+    .channel-item.active {
+      color: #fff;
+      background:
+        linear-gradient(135deg, rgba(124, 92, 255, 0.18), rgba(34, 211, 238, 0.08)),
+        rgba(255, 255, 255, 0.05);
+      box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.28), 0 10px 24px rgba(124, 92, 255, 0.12);
+    }
+
+    .hash {
+      font-size: 18px;
+      color: #a5b4fc;
+      font-weight: 900;
+      line-height: 1;
+      text-shadow: 0 0 16px rgba(124, 92, 255, 0.45);
+    }
+
+    #app.joined .main-chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(124, 92, 255, 0.08), transparent 30%),
+        radial-gradient(circle at 100% 12%, rgba(255, 94, 168, 0.06), transparent 24%),
+        linear-gradient(180deg, rgba(16, 20, 32, 0.92), rgba(11, 15, 25, 0.96));
+      position: relative;
+    }
+    #app.joined .main-chat-area::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 10%),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: auto, 48px 48px, 48px 48px;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), transparent 95%);
+      opacity: 0.35;
+    }
+
     header {
-      display: flex; align-items: center; justify-content: space-between; gap: 16px;
-      padding: 20px 24px;
-      background: rgba(0, 0, 0, 0.2);
-      border-bottom: 1px solid var(--glass-border);
+      height: var(--header-h);
+      padding: 0 18px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(20, 25, 38, 0.95), rgba(17, 21, 34, 0.78));
+      backdrop-filter: blur(18px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
     }
-    h1 {
-      margin: 0; font-size: clamp(20px, 3vw, 26px); font-weight: 700;
-      background: linear-gradient(to right, var(--accent3), #fff);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    .header-left {
+      font-size: 16px; font-weight: 800; color: #fff;
+      display: flex; align-items: center; gap: 10px; letter-spacing: 0.1px;
     }
-    .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
-    .mark {
-      width: 48px; height: 48px; border-radius: 12px;
-      background: linear-gradient(135deg, var(--accent2), var(--accent1));
-      color: white; display: grid; place-items: center;
-      font-weight: 800; font-size: 18px; flex: 0 0 auto;
-      box-shadow: 0 4px 12px rgba(121, 40, 202, 0.3);
-    }
+    .header-left .hash { font-size: 19px; }
+
     #status {
+      font-size: 12px;
+      color: var(--muted);
       display: inline-flex; align-items: center; gap: 8px;
-      color: var(--muted); font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
     }
     #status::before {
-      content: ""; width: 8px; height: 8px; border-radius: 50%;
-      background: #ff4757; box-shadow: 0 0 10px #ff4757;
-      transition: all 0.3s ease;
+      content: "";
+      width: 8px; height: 8px; border-radius: 50%;
+      background: linear-gradient(180deg, #fb7185, #ef4444);
+      box-shadow: 0 0 0 6px rgba(251, 113, 133, 0.09);
+      flex: 0 0 auto;
+    }
+    #status.connected {
+      color: #d8fff6;
+      border-color: rgba(45, 212, 191, 0.18);
+      background: rgba(45, 212, 191, 0.09);
     }
     #status.connected::before {
-      background: #2ed573; box-shadow: 0 0 10px #2ed573;
+      background: linear-gradient(180deg, #34d399, #10b981);
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.12);
     }
-    
-    #joinPanel { display: grid; place-items: center; padding: 24px; }
+
+    #joinPanel {
+      display: grid; place-items: center;
+      width: 100%; height: 100%;
+      padding: 24px;
+    }
+
     .join-box {
-      width: min(400px, 100%); display: grid; gap: 20px; padding: 30px;
-      border: 1px solid var(--glass-border); border-radius: 16px;
-      background: rgba(0, 0, 0, 0.2); box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      width: min(520px, 100%);
+      padding: 34px 34px 30px;
+      border-radius: 30px;
+      background: linear-gradient(180deg, rgba(22, 27, 43, 0.92), rgba(13, 17, 28, 0.92));
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
     }
-    .join-box h2 { margin: 0; font-size: 24px; text-align: center; font-weight: 600; }
-    .join-row { display: flex; gap: 12px; flex-direction: column; }
-    
+    .join-box::before {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(124, 92, 255, 0.35), transparent 28%),
+        radial-gradient(circle at 100% 12%, rgba(34, 211, 238, 0.22), transparent 26%),
+        radial-gradient(circle at 70% 110%, rgba(255, 94, 168, 0.18), transparent 26%);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+    .join-box > * { position: relative; z-index: 1; }
+    .join-box h2 {
+      color: #fff;
+      font-size: clamp(30px, 4vw, 40px);
+      line-height: 1.05;
+      margin-bottom: 10px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      text-align: left;
+    }
+    .join-subtitle {
+      color: var(--muted);
+      font-size: 15px;
+      margin-bottom: 22px;
+      line-height: 1.6;
+      text-align: left;
+    }
+    .join-row { display: flex; flex-direction: column; text-align: left; gap: 10px; }
+    .join-row label {
+      color: #c9d1e6;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-left: 2px;
+    }
+    .join-box input {
+      width: 100%;
+      background: rgba(8, 12, 20, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 18px;
+      color: var(--text);
+      padding: 15px 16px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease, background 0.2s ease;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+    .join-box input::placeholder, #message::placeholder { color: #8a93a8; }
+    .join-box input:focus {
+      border-color: rgba(124, 92, 255, 0.75);
+      box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.18), 0 10px 30px rgba(124, 92, 255, 0.12);
+      transform: translateY(-1px);
+      background: rgba(10, 14, 23, 0.98);
+    }
+    .join-box button {
+      margin-top: 8px;
+      border: none;
+      border-radius: 18px;
+      padding: 14px 18px;
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      color: white;
+      background: linear-gradient(135deg, var(--brand), var(--brand-3) 55%, var(--brand-4));
+      box-shadow: 0 16px 32px rgba(124, 92, 255, 0.28), 0 10px 24px rgba(34, 211, 238, 0.14);
+      transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+    }
+    .join-box button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+      box-shadow: 0 18px 40px rgba(124, 92, 255, 0.34), 0 14px 28px rgba(34, 211, 238, 0.18);
+    }
+
     #messages {
-      min-height: 0; padding: 24px; overflow-y: auto;
-      display: flex; flex-direction: column; gap: 16px; scroll-behavior: smooth;
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      scroll-behavior: smooth;
     }
-    #messages::-webkit-scrollbar { width: 6px; }
-    #messages::-webkit-scrollbar-track { background: transparent; }
-    #messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-    
-    @keyframes slideUpFade {
-      from { opacity: 0; transform: translateY(15px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    
+
     .message {
-      width: fit-content; max-width: min(85%, 600px);
-      display: grid; gap: 6px; align-self: flex-start;
-      animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      width: 100%;
+      padding: 14px 14px 14px 18px;
+      border-radius: 18px;
+      transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+      border: 1px solid transparent;
     }
-    .message.own { align-self: flex-end; }
-    
-    .meta { color: var(--muted); font-size: 11px; padding: 0 6px; font-weight: 500; letter-spacing: 0.3px; }
-    .message.own .meta { text-align: right; }
-    
+    .message:hover {
+      background: rgba(255, 255, 255, 0.03);
+      border-color: rgba(255, 255, 255, 0.05);
+      transform: translateY(-1px);
+    }
+    .message.own {
+      background: linear-gradient(135deg, rgba(124, 92, 255, 0.11), rgba(34, 211, 238, 0.06)), rgba(255, 255, 255, 0.02);
+      border-color: rgba(124, 92, 255, 0.14);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    }
+    .message.own .meta::after {
+      content: "YOU";
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      color: #d8e4ff;
+      margin-left: 10px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(124, 92, 255, 0.17);
+      border: 1px solid rgba(124, 92, 255, 0.22);
+      vertical-align: middle;
+    }
+
+    .meta {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .meta::before {
+      content: "";
+      width: 10px; height: 10px; border-radius: 999px;
+      background: linear-gradient(135deg, var(--brand-3), var(--brand));
+      box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.08);
+      flex: 0 0 auto;
+    }
+
     .bubble {
-      padding: 14px 18px; border-radius: 18px; border-bottom-left-radius: 4px;
-      background: var(--bubble-other); backdrop-filter: blur(10px);
-      color: var(--text); line-height: 1.5; overflow-wrap: anywhere;
-      border: 1px solid var(--glass-border); font-size: 15px;
+      font-size: 15px;
+      color: var(--text);
+      line-height: 1.6;
+      word-break: break-word;
+      white-space: pre-wrap;
+      padding-left: 16px;
+      border-left: 2px solid rgba(124, 92, 255, 0.18);
     }
-    .own .bubble {
-      background: var(--bubble-own); border: none;
-      border-bottom-left-radius: 18px; border-bottom-right-radius: 4px;
-      box-shadow: 0 6px 20px rgba(121, 40, 202, 0.25);
-    }
-    
+
     .system {
-      align-self: center; max-width: 90%; color: var(--muted); font-size: 12px;
-      text-align: center; padding: 8px 16px; border-radius: 999px;
-      background: var(--system-bg); border: 1px solid var(--glass-border);
-      animation: slideUpFade 0.4s ease forwards;
+      padding: 10px 14px;
+      margin: 6px 0;
+      border-radius: 16px;
+      font-size: 14px;
+      color: #c3c9d7;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      line-height: 1.5;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
     }
-    
+    .system::before {
+      content: "✦";
+      color: #22d3ee;
+      font-size: 13px;
+      text-shadow: 0 0 12px rgba(34, 211, 238, 0.35);
+      flex: 0 0 auto;
+    }
+
     #composer {
-      display: flex; gap: 12px; padding: 20px 24px;
-      background: rgba(0, 0, 0, 0.2); border-top: 1px solid var(--glass-border);
+      padding: 18px 16px 20px;
+      background: linear-gradient(180deg, rgba(13, 17, 28, 0.16), rgba(13, 17, 28, 0.82));
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-top: 1px solid var(--line);
+      backdrop-filter: blur(18px);
+      min-height: var(--composer-h);
     }
-    input {
-      flex: 1; min-width: 0; border: 1px solid var(--glass-border); border-radius: 12px;
-      background: rgba(255, 255, 255, 0.03); color: #fff; padding: 14px 18px;
-      font-size: 15px; outline: none; transition: all 0.2s ease;
+    #message {
+      flex: 1;
+      min-width: 0;
+      background: linear-gradient(180deg, rgba(8, 12, 20, 0.96), rgba(12, 16, 26, 0.92));
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 22px;
+      color: var(--text);
+      padding: 16px 18px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 10px 30px rgba(0, 0, 0, 0.18);
     }
-    input:focus {
-      background: rgba(255, 255, 255, 0.06); border-color: var(--accent3); 
-      box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.1);
+    #message:focus {
+      border-color: rgba(34, 211, 238, 0.55);
+      box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.12), 0 14px 34px rgba(34, 211, 238, 0.08);
+      transform: translateY(-1px);
     }
-    button {
-      border: 0; border-radius: 12px;
-      background: linear-gradient(135deg, var(--accent3), #0072ff);
-      color: #fff; min-height: 48px; padding: 0 24px;
-      font-weight: 600; font-size: 15px; cursor: pointer;
-      transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(0, 212, 255, 0.2);
+    #send {
+      border: none;
+      border-radius: 20px;
+      padding: 15px 20px;
+      min-width: 104px;
+      font-weight: 900;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      font-size: 14px;
+      color: white;
+      background: linear-gradient(135deg, var(--brand), var(--brand-2) 35%, var(--brand-4));
+      box-shadow: 0 16px 32px rgba(124, 92, 255, 0.22), 0 10px 22px rgba(255, 94, 168, 0.12);
+      transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
     }
-    button:hover:not(:disabled) {
-      transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 212, 255, 0.3);
+    #send:hover:not(:disabled) {
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+      box-shadow: 0 18px 38px rgba(124, 92, 255, 0.28), 0 14px 26px rgba(255, 94, 168, 0.16);
     }
-    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-    
-    main:not(.joined) #messages, main:not(.joined) #composer { display: none; }
-    main.joined #joinPanel { display: none; }
-    
-    @media (max-width: 640px) {
-      body { padding: 0; }
-      main { width: 100%; height: 100vh; border: 0; border-radius: 0; }
-      header { padding: 16px; }
-      .message { max-width: 90%; }
-      #messages, #composer { padding: 16px; }
-      .join-box { border: none; background: transparent; box-shadow: none; padding: 20px; }
+    #send:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; filter: saturate(0.7); }
+
+    @media (max-width: 900px) {
+      #app.joined .sidebar { width: 224px; }
+      .join-box { padding: 28px 24px 24px; }
+      #composer { padding: 14px 12px 16px; }
+    }
+
+    @media (max-width: 720px) {
+      #app { border-radius: 0; }
+      #app.joined .sidebar { display: none; }
+      header { padding: 0 14px; }
+      #status { letter-spacing: 0.12em; padding: 8px 10px; }
+      .join-box { border-radius: 24px; }
+      .message { padding: 12px 12px 12px 14px; }
+      .bubble { padding-left: 12px; }
+      #send { min-width: 88px; padding-inline: 16px; }
     }
   </style>
+
 </head>
 <body>
   <main id="app">
-    <header>
-      <div class="brand">
-        <div class="mark">FC</div>
-        <h1>Family Chat</h1>
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h3>Family Server</h3>
       </div>
-      <div id="status">Waiting to join</div>
-    </header>
-    <section id="joinPanel">
-      <form id="joinForm" class="join-box">
-        <h2>Join the room</h2>
-        <div class="join-row">
-          <input id="name" autocomplete="name" placeholder="Your name" maxlength="32">
-          <button type="submit">Join</button>
+      <div class="sidebar-channels">
+        <div class="channel-item active">
+          <span class="hash">#</span> general
         </div>
+      </div>
+    </div>
+    
+    <div class="main-chat-area">
+      <header>
+        <div class="header-left">
+          <span class="hash">#</span> general
+        </div>
+        <div id="status">Waiting to join</div>
+      </header>
+      
+      <section id="joinPanel">
+        <form id="joinForm" class="join-box">
+          <h2>Welcome back!</h2>
+          <div class="join-subtitle">We're so excited to see you again!</div>
+          <div class="join-row">
+            <label>ENTER A DISPLAY NAME</label>
+            <input id="name" autocomplete="name" placeholder="What should we call you?" maxlength="32">
+            <button type="submit">Join Room</button>
+          </div>
+        </form>
+      </section>
+      
+      <section id="messages" aria-live="polite"></section>
+      
+      <form id="composer">
+        <input id="message" autocomplete="off" placeholder="Message #general" maxlength="500">
+        <button id="send" type="submit" disabled>Send</button>
       </form>
-    </section>
-    <section id="messages" aria-live="polite"></section>
-    <form id="composer">
-      <input id="message" autocomplete="off" placeholder="Type a message" maxlength="500">
-      <button id="send" type="submit" disabled>Send</button>
-    </form>
+    </div>
   </main>
   <script>
     const app = document.querySelector("#app");
@@ -451,7 +775,7 @@ std::string chat_page() {
 
       const meta = document.createElement("div");
       meta.className = "meta";
-      meta.textContent = `${sender} - ${now()}`;
+      meta.textContent = `${sender} — ${now()}`;
 
       const bubble = document.createElement("div");
       bubble.className = "bubble";
@@ -603,6 +927,12 @@ void handle_http_client(int client_fd, std::string request,
         return;
     }
 
+    if (method == "HEAD") {
+        send_http_response(client_fd, "200 OK", "text/plain", "");
+        ::close(client_fd);
+        return;
+    }    
+
     if (method == "POST" && target == "/send") {
         std::string name = form_value(body, "name");
         std::string message = form_value(body, "message");
@@ -628,47 +958,35 @@ void handle_http_client(int client_fd, std::string request,
     ::close(client_fd);
 }
 
-// -----------------------------------------------------------------------------
-//  Per-client worker thread
-// -----------------------------------------------------------------------------
-//
-// Reads newline-delimited lines from a single client, treating the first line
-// as the display name and broadcasting the rest. Cleans up on disconnect.
 void handle_client(int client_fd, std::string peer_address) {
     char   buffer[chat::RECV_BUFFER_SIZE];
-    std::string inbox;          // Accumulates bytes until a full line arrives.
-    std::string display_name;   // Empty until the client sends its name.
+    std::string inbox;
+    std::string display_name;
 
     while (g_running.load()) {
         ssize_t received = ::recv(client_fd, buffer, sizeof(buffer), 0);
         if (received <= 0) {
-            // 0  => client closed the connection cleanly.
-            // <0 => socket error.
             break;
         }
-
         inbox.append(buffer, static_cast<size_t>(received));
 
         if (display_name.empty() &&
             (starts_with(inbox, "GET ") || starts_with(inbox, "POST ") ||
-             starts_with(inbox, "OPTIONS "))) {
+             starts_with(inbox, "OPTIONS ") || starts_with(inbox, "HEAD "))) {
             handle_http_client(client_fd, inbox, peer_address);
             return;
         }
 
-        // Pull every complete line out of the inbox buffer.
         size_t newline_pos;
         while ((newline_pos = inbox.find(chat::MESSAGE_DELIMITER)) != std::string::npos) {
             std::string line = inbox.substr(0, newline_pos);
             inbox.erase(0, newline_pos + 1);
 
-            // Strip a trailing carriage return (handles CRLF clients).
             if (!line.empty() && line.back() == '\r') {
                 line.pop_back();
             }
 
             if (display_name.empty()) {
-                // First line = the client's chosen name.
                 display_name = line.empty() ? peer_address : line;
                 register_client(client_fd, display_name, ClientKind::RawTcp);
 
@@ -686,13 +1004,12 @@ void handle_client(int client_fd, std::string peer_address) {
                     continue;
                 }
                 std::string formatted = display_name + ": " + line + "\n";
-                std::cout << formatted;          // Echo to server console.
-                broadcast(formatted, client_fd); // Relay to everyone else.
+                std::cout << formatted;
+                broadcast(formatted, client_fd);
             }
         }
     }
 
-    // ---- Cleanup on disconnect ----
     std::string name = unregister_client(client_fd);
     ::close(client_fd);
 
@@ -706,10 +1023,6 @@ void handle_client(int client_fd, std::string peer_address) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    // Port selection priority:
-    //   1. Command-line argument (e.g. ./server 6000)
-    //   2. The PORT environment variable (injected by Railway and most PaaS)
-    //   3. The compiled-in default (chat::DEFAULT_PORT)
     uint16_t port = chat::DEFAULT_PORT;
     if (const char* env_port = std::getenv("PORT")) {
         if (*env_port) {
@@ -720,20 +1033,18 @@ int main(int argc, char* argv[]) {
         port = static_cast<uint16_t>(std::stoi(argv[1]));
     }
 
-    // ---- Create the listening socket ----
     int listen_fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd < 0) {
         std::perror("socket");
         return 1;
     }
 
-    // Allow quick restart of the server without "address already in use".
     int opt = 1;
     ::setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     sockaddr_in server_addr{};
     server_addr.sin_family      = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;   // Listen on all interfaces.
+    server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port        = htons(port);
 
     if (::bind(listen_fd, reinterpret_cast<sockaddr*>(&server_addr),
@@ -752,7 +1063,6 @@ int main(int argc, char* argv[]) {
     std::cout << "[server] Chat server listening on port " << port << "\n";
     std::cout << "[server] Press Ctrl+C to stop.\n";
 
-    // ---- Acceptor loop ----
     while (g_running.load()) {
         sockaddr_in client_addr{};
         socklen_t   client_len = sizeof(client_addr);
@@ -767,13 +1077,11 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        // Build a "ip:port" string for logging.
         char ip_str[INET_ADDRSTRLEN];
         ::inet_ntop(AF_INET, &client_addr.sin_addr, ip_str, sizeof(ip_str));
         std::string peer = std::string(ip_str) + ":" +
                            std::to_string(ntohs(client_addr.sin_port));
 
-        // Hand the client off to a detached worker thread.
         std::thread(handle_client, client_fd, peer).detach();
     }
 
